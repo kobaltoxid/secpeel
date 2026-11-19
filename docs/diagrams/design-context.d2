@@ -1,0 +1,85 @@
+direction: right
+
+vars: {
+  d2-config: {
+    theme-id: 3
+    dark-theme-id: 200
+    theme-overrides: {
+      B1: "#627985"
+      B3: "#EFF5F7"
+      B4: "#EFF5F7"
+      B5: "#EFF5F7"
+      B6: "#EFF5F7"
+      AA5: "#EFF5F7"
+      N1: "#182A34"
+      N2: "#526570"
+    }
+    dark-theme-overrides: {
+      B1: "#8FA6B0"
+      B3: "#26383F"
+      B4: "#26383F"
+      B5: "#26383F"
+      B6: "#26383F"
+      AA5: "#26383F"
+      N1: "#EDF3F5"
+      N2: "#BAC8CE"
+    }
+  }
+}
+
+classes: {
+  component: {
+    style: {
+      border-radius: 8
+      stroke-width: 1
+    }
+  }
+  boundary: {
+    style: {
+      fill: transparent
+      stroke: "#CBD8DF"
+      stroke-width: 1
+    }
+  }
+}
+
+artifact: Compiled artifact {
+  shape: document
+  class: component
+}
+
+source: Source project {
+  shape: document
+  class: component
+}
+
+binsca: secpeel {
+  class: component
+}
+
+secdepth: {
+  label: secdepth
+  class: boundary
+  resolver: Resolver {
+    class: component
+  }
+  match: "Match and check" {
+    class: component
+  }
+}
+
+db: "Advisory databases\n(OSV, NVD)" {
+  shape: cylinder
+  class: component
+}
+
+model: "Model review\nand report" {
+  class: component
+}
+
+artifact -> binsca: files
+source -> secdepth.resolver: lockfiles
+binsca -> secdepth.match: "inventory +\ncoverage ledger"
+secdepth.resolver -> secdepth.match: inventory
+secdepth.match -> db: lookups
+secdepth.match -> model: "findings +\nevidence"
