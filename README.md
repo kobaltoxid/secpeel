@@ -1,8 +1,8 @@
-# secpeel (working name)
+# secpeel
 
 secpeel finds the open-source components inside compiled artifacts, such as executables, libraries, JARs, container images, firmware and installers, without source code or build files. It writes a component inventory that [secdepth](https://github.com/kobaltoxid/secdepth) matches against published advisories.
 
-Detection is deterministic and never runs the artifact. A language model is used only later, in secdepth, to review flagged findings and write advice. The name is a placeholder.
+Detection is deterministic and never runs the artifact. A language model is used only later, in secdepth, to review flagged findings and write advice.
 
 secpeel does two jobs for secdepth: it builds the inventory, and after matching it looks for the vulnerable code itself.
 

@@ -1,7 +1,5 @@
 # Agent instructions
 
-secpeel is a working name; the project will be renamed.
-
 ## Principles
 
 - Keep the pipeline deterministic. Unpacking, identification, advisory lookup and version matching must not depend on a language model. A model may only verify, explain and advise on results the pipeline produced.

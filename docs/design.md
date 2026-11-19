@@ -1,6 +1,6 @@
 # secpeel and secdepth design
 
-This page describes how secpeel (working name) and secdepth together find known vulnerabilities in compiled artifacts and source projects, with deterministic tools doing the detection and a language model only verifying and explaining the results.
+This page describes how secpeel and secdepth together find known vulnerabilities in compiled artifacts and source projects, with deterministic tools doing the detection and a language model only verifying and explaining the results.
 
 ## Goals and constraints
 
@@ -108,5 +108,4 @@ These were agreed on 2026-11-19.
 
 ## Open decisions
 
-- The project name.
 - The license. Apache-2.0 would match the wrapped tools.
