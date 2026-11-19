@@ -79,6 +79,8 @@ The command checks whether the classes or functions each advisory names are pres
 
 Evidence covers Java classes and native ELF or Mach-O symbols only. Components identified from Python, Go, Rust, .NET or npm metadata get no code-level evidence yet, so their findings stay `unknown`. Set `CFR_JAR` to a CFR decompiler JAR to include decompiled lines from referencing Java classes.
 
+The files the two tools exchange are versioned, and each reader checks the version and the fields it relies on. secpeel owns the evidence format ([schemas/evidence-schema.json](schemas/evidence-schema.json)); secdepth's [hand-off formats](https://github.com/kobaltoxid/secdepth/blob/main/docs/handoff-formats.md) page describes all three files and the compatibility rules.
+
 Native components are matched through NVD by CPE. Set `NVD_API_KEY` to raise NVD's rate limit.
 
 ## Limitations

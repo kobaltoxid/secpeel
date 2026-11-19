@@ -65,10 +65,55 @@ def scan(args):
     return 0
 
 
+def validate_inputs(matches, data, matches_path, inventory_path):
+    """Problems with secdepth's matches (secdepth-matches 1.x) and inventory (secdepth-inventory 1.x) files.
+
+    Any 1.x file is accepted: a minor version may only add optional fields. Extra fields are ignored.
+    """
+    errors = []
+    for doc, path, schema in ((matches, matches_path, "secdepth-matches"), (data, inventory_path, "secdepth-inventory")):
+        if not isinstance(doc, dict):
+            errors.append("%s: top level must be an object" % path)
+            continue
+        if doc.get("schema") != schema:
+            errors.append("%s: schema is %r, expected %r" % (path, doc.get("schema"), schema))
+        version = str(doc.get("schema_version", ""))
+        if version.split(".")[0] != "1":
+            errors.append("%s: schema_version %r is not supported; this secpeel reads 1.x" % (path, version or None))
+    if errors:
+        return errors
+    advisories = matches.get("advisories")
+    if not isinstance(advisories, list):
+        errors.append("%s: advisories must be a list" % matches_path)
+    for i, adv in enumerate(advisories if isinstance(advisories, list) else []):
+        where = "%s: advisories[%d]" % (matches_path, i)
+        if not isinstance(adv, dict) or not isinstance(adv.get("id"), str):
+            errors.append(where + ".id must be a string")
+            continue
+        for field in ("summary", "details"):
+            if field in adv and adv[field] is not None and not isinstance(adv[field], str):
+                errors.append("%s.%s must be a string" % (where, field))
+        affected = adv.get("affected")
+        if not isinstance(affected, list) or not all(isinstance(a, dict) and isinstance(a.get("component_id"), str) for a in affected):
+            errors.append(where + ".affected must be a list of objects with a component_id string")
+    components = data.get("components")
+    if not isinstance(components, list) or not all(isinstance(c, dict) and isinstance(c.get("id"), str) for c in components):
+        errors.append("%s: components must be a list of objects with an id string" % inventory_path)
+    return errors
+
+
 def evidence_cmd(args):
     artifact = pathlib.Path(args.artifact)
-    matches = json.loads(pathlib.Path(args.matches).read_text(encoding="utf-8"))
-    data = json.loads(pathlib.Path(args.inventory).read_text(encoding="utf-8"))
+    try:
+        matches = json.loads(pathlib.Path(args.matches).read_text(encoding="utf-8"))
+        data = json.loads(pathlib.Path(args.inventory).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print("cannot read input: %s" % exc, file=sys.stderr)
+        return 1
+    problems = validate_inputs(matches, data, args.matches, args.inventory)
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        return 1
     components = {c["id"]: c for c in data["components"]}
     leaves, reason = (None, "no --workdir given")
     if args.workdir:

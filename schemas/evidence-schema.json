@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "secpeel evidence",
+  "description": "Written by `secpeel evidence`. Lists only the fields other tools may rely on; secpeel may add optional fields in any 1.x version.",
+  "type": "object",
+  "required": ["schema", "schema_version", "results"],
+  "properties": {
+    "schema": {"const": "secpeel-evidence"},
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["advisory_id", "component_id", "proposed_reachability", "facts"],
+        "properties": {
+          "advisory_id": {"type": "string", "description": "Advisory ID from the matches file."},
+          "component_id": {"type": "string", "description": "Inventory component the evidence is about."},
+          "proposed_reachability": {"enum": ["reachable", "conditional", "unknown", "not-reachable"]},
+          "facts": {"type": "array", "items": {"type": "string"}, "description": "Plain-language findings with locations."},
+          "named": {"type": "array", "items": {"type": "string"}},
+          "present": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

@@ -105,7 +105,7 @@ class EvidenceTests(unittest.TestCase):
         artifact.write_bytes(fx.tar_bytes({"log4j.jar": fx.zip_bytes({POM_PATH: POM, JNDI + ".class": fx.JAVA_CLASS})}))
         inv, matches, out = self.dir / "inv.json", self.dir / "matches.json", self.dir / "ev.json"
         cli.main(["scan", str(artifact), "--output", str(inv)])
-        matches.write_text(json.dumps({"advisories": [{"id": "CVE-X", "summary": "", "details": "JndiLookup",
+        matches.write_text(json.dumps({"schema": "secdepth-matches", "schema_version": "1.0", "advisories": [{"id": "CVE-X", "summary": "", "details": "JndiLookup",
                                                        "affected": [{"component_id": "Maven:org.apache.logging.log4j:log4j-core@2.14.1"}]}]}))
         self.assertEqual(cli.main(["evidence", str(artifact), "--inventory", str(inv), "--matches", str(matches),
                                    "--output", str(out)]), 0)
@@ -124,7 +124,7 @@ class WorkdirReuseTests(unittest.TestCase):
         self.artifact = self.dir / "lib.tar"
         self.artifact.write_bytes(fx.tar_bytes({"log4j.jar": fx.zip_bytes({POM_PATH: POM, JNDI + ".class": fx.JAVA_CLASS})}))
         self.inv, self.matches, self.work = self.dir / "inv.json", self.dir / "matches.json", self.dir / "unpacked"
-        self.matches.write_text(json.dumps({"advisories": [{"id": "CVE-X", "summary": "", "details": "JndiLookup",
+        self.matches.write_text(json.dumps({"schema": "secdepth-matches", "schema_version": "1.0", "advisories": [{"id": "CVE-X", "summary": "", "details": "JndiLookup",
                                                            "affected": [{"component_id": "Maven:org.apache.logging.log4j:log4j-core@2.14.1"}]}]}))
         cli.main(["scan", str(self.artifact), "--output", str(self.inv), "--workdir", str(self.work)])
 
@@ -160,3 +160,58 @@ class WorkdirReuseTests(unittest.TestCase):
         calls = []
         self.evidence(calls)
         self.assertEqual(len(calls), 1)
+
+
+class MatchesContractTests(unittest.TestCase):
+    """secdepth writes matches.json; secpeel must accept what it writes today and reject what it cannot read."""
+    FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "secdepth-matches-1.0.json"
+    INVENTORY = {"schema": "secdepth-inventory", "schema_version": "1.0", "components": [{"id": "x"}]}
+
+    def problems(self, matches, inventory=None):
+        return cli.validate_inputs(matches, inventory or dict(self.INVENTORY), "m.json", "inv.json")
+
+    def load(self):
+        return json.loads(self.FIXTURE.read_text())
+
+    def test_accepts_the_producer_fixture(self):
+        self.assertEqual(self.problems(self.load()), [])
+
+    def test_accepts_extra_optional_fields_and_minor_versions(self):
+        data = self.load()
+        data["schema_version"] = "1.7"
+        data["advisories"][0]["future_field"] = {"x": 1}
+        data["new_top_level"] = True
+        self.assertEqual(self.problems(data), [])
+
+    def test_accepts_empty_advisories(self):
+        data = self.load()
+        data["advisories"] = []
+        self.assertEqual(self.problems(data), [])
+
+    def test_rejects_unsupported_major_version(self):
+        data = self.load()
+        data["schema_version"] = "2.0"
+        self.assertTrue(any("m.json" in p and "2.0" in p for p in self.problems(data)))
+        inventory = dict(self.INVENTORY, schema_version="3.1")
+        self.assertTrue(any("inv.json" in p for p in self.problems(self.load(), inventory)))
+
+    def test_rejects_missing_required_fields(self):
+        data = self.load()
+        del data["advisories"]
+        self.assertIn("m.json: advisories must be a list", self.problems(data))
+        data = self.load()
+        del data["advisories"][0]["affected"][0]["component_id"]
+        self.assertTrue(any("advisories[0].affected" in p for p in self.problems(data)))
+
+    def test_cli_rejects_a_bad_file(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        artifact = root / "a.tar"
+        artifact.write_bytes(fx.tar_bytes({"x.txt": b"x"}))
+        (root / "inv.json").write_text(json.dumps(self.INVENTORY))
+        bad = self.load()
+        bad["schema_version"] = "2.0"
+        (root / "m.json").write_text(json.dumps(bad))
+        self.assertEqual(cli.main(["evidence", str(artifact), "--inventory", str(root / "inv.json"),
+                                   "--matches", str(root / "m.json")]), 1)
