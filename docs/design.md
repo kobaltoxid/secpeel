@@ -111,8 +111,5 @@ These were agreed on 2026-11-19.
 
 - unblob and Syft are optional. The core runs on the Python standard library, and the coverage ledger records anything skipped because an optional tool is missing.
 - secdepth's deterministic core is built first, so the binary project plugs into a working matcher.
+- secpeel and secdepth are licensed under Apache-2.0.
 - secdepth's resolver supports npm first, then PyPI, Maven and Gradle, Go, Cargo and NuGet.
-
-## Open decisions
-
-- The license. Apache-2.0 would match the wrapped tools.

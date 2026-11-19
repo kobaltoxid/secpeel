@@ -107,3 +107,11 @@ Native components are matched through NVD by CPE. Set `NVD_API_KEY` to raise NVD
 ## Development
 
 Run the tests from the repository root with `python3 -m unittest discover -s tests`. The design is described in [docs/design.md](docs/design.md).
+
+## Disclaimer
+
+secpeel is an independent project. It is not affiliated with, endorsed by, or sponsored by the maintainers of any component it identifies. Results come from embedded metadata and binary signatures and may be incomplete or wrong; check them against the cited files before acting on them.
+
+## License
+
+secpeel is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attributions.
