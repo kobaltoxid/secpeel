@@ -70,6 +70,8 @@ For each match, secdepth collects evidence without a model:
 
 For a compiled artifact, `secpeel evidence` checks whether the classes or functions an advisory names are present in the affected component, and lists the code that references them. It reads JAR contents and constant pools for Java and symbol tables for native code. CFR can decompile the referencing Java classes when it is installed. A finding without that evidence stays `unknown`.
 
+This step is optional. The version match decides whether to upgrade; the evidence only helps prioritise mitigation. A hit does not prove reachability, and a miss does not clear a finding.
+
 ### 6. Review with a model
 
 The model reads the draft findings and their evidence. It confirms or corrects reachability for findings marked `conditional` or `undetermined`, flags contradictions between evidence and verdict, and writes the summary and remediation advice. It cannot add findings without evidence from an earlier stage.

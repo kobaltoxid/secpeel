@@ -4,11 +4,21 @@ secpeel finds the open-source components inside compiled artifacts, such as exec
 
 Detection is deterministic and never runs the artifact. A language model is used only later, in secdepth, to review flagged findings and write advice.
 
-secpeel does two jobs for secdepth: it builds the inventory, and after matching it looks for the vulnerable code itself.
+`secpeel scan` stands on its own: it tells you which components and versions an artifact contains, where they are, and what it could not identify. After secdepth has matched advisories, the optional `secpeel evidence` step reads its `matches.json` file and checks whether the code those advisories name actually shipped.
 
-![The artifact goes to the unpacker, which passes files to the identifiers. The identifiers send an inventory and coverage ledger to secdepth. secdepth sends its matches to the evidence collector, which returns class and symbol evidence.](docs/diagrams/scan-flow.svg)
+Three questions split the work between the two tools:
 
-Figure 1. The scan feeds secdepth's matcher, and the evidence step answers its matches. [D2 source](docs/diagrams/scan-flow.d2)
+| Question | Answered by | Output |
+| --- | --- | --- |
+| What shipped in this artifact? | `secpeel scan` | Components, versions and unidentified files |
+| Which known vulnerabilities affect those versions? | secdepth's `match.py` | Matched advisories |
+| Is the code a match names actually in the artifact? | `secpeel evidence`, optional | Class and symbol evidence per match |
+
+A standalone `secpeel scan` produces no vulnerability findings; matching happens in secdepth.
+
+![The artifact goes to the unpacker, which passes files to the identifiers. The identifiers send an inventory and coverage ledger to secdepth. The unpacker also passes its files to the evidence collector, which takes secdepth's matches file and returns class and symbol evidence.](docs/diagrams/scan-flow.svg)
+
+Figure 1. The scan stands alone. The optional evidence step reads secdepth's matches file and reuses the unpacked files. [D2 source](docs/diagrams/scan-flow.d2)
 
 ## Install
 
@@ -25,7 +35,7 @@ Optional tools widen coverage when they are on `PATH`: [unblob](https://github.c
 ## Scan an artifact
 
 ```sh
-python3 -m secpeel scan app-image.tar --output app.inventory.json --cyclonedx app.cdx.json
+python3 -m secpeel scan app-image.tar --output app.inventory.json --cyclonedx app.cdx.json --workdir unpacked
 ```
 
 The scan unpacks the artifact recursively by file content, identifies components, and writes:
@@ -51,17 +61,23 @@ Every file ends up in the inventory's coverage ledger as `unpacked`, `identified
 
 ## Find vulnerabilities with secdepth
 
+secdepth's `scan.py` runs this whole sequence for a compiled file: `secpeel scan`, its own matcher, `secpeel evidence`, then its checks, draft and report. Both secpeel calls share one work folder. To run the steps yourself:
+
 From a secdepth checkout, match the inventory and draft the report:
 
 ```sh
 python3 skills/secdepth/scripts/match.py app.inventory.json
-python3 -m secpeel evidence app-image.tar --inventory app.inventory.json --matches matches.json
+python3 -m secpeel evidence app-image.tar --inventory app.inventory.json --matches matches.json --workdir unpacked
 python3 skills/secdepth/scripts/check.py app.inventory.json matches.json --evidence evidence.json
 python3 skills/secdepth/scripts/draft.py app.inventory.json matches.json checks.json
 python3 skills/secdepth/scripts/render_report.py draft.json
 ```
 
-Run the `secpeel evidence` command from this repository. It checks whether the classes or functions each advisory names are present in the component and which other code references them. When they are present, the finding becomes `conditional`; otherwise it stays `unknown` for review. Set `CFR_JAR` to a CFR decompiler JAR to include decompiled lines from referencing Java classes.
+Run the `secpeel evidence` command from this repository. Give it the same `--workdir` as the scan so it reuses the unpacked files; it unpacks again only when the folder is missing or belongs to a different artifact. Delete the folder when you are done.
+
+The command checks whether the classes or functions each advisory names are present in the component and which other code references them. It is optional triage after a version match: the match alone is enough to plan an upgrade, and the evidence helps decide how urgently to mitigate when you cannot patch yet. A hit does not prove the vulnerable code is reachable at runtime, and a miss does not clear the finding. When they are present, the finding becomes `conditional`; otherwise it stays `unknown` for review.
+
+Evidence covers Java classes and native ELF or Mach-O symbols only. Components identified from Python, Go, Rust, .NET or npm metadata get no code-level evidence yet, so their findings stay `unknown`. Set `CFR_JAR` to a CFR decompiler JAR to include decompiled lines from referencing Java classes.
 
 Native components are matched through NVD by CPE. Set `NVD_API_KEY` to raise NVD's rate limit.
 

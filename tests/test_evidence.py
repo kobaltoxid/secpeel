@@ -114,3 +114,49 @@ class EvidenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkdirReuseTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = pathlib.Path(self.tmp.name)
+        self.artifact = self.dir / "lib.tar"
+        self.artifact.write_bytes(fx.tar_bytes({"log4j.jar": fx.zip_bytes({POM_PATH: POM, JNDI + ".class": fx.JAVA_CLASS})}))
+        self.inv, self.matches, self.work = self.dir / "inv.json", self.dir / "matches.json", self.dir / "unpacked"
+        self.matches.write_text(json.dumps({"advisories": [{"id": "CVE-X", "summary": "", "details": "JndiLookup",
+                                                           "affected": [{"component_id": "Maven:org.apache.logging.log4j:log4j-core@2.14.1"}]}]}))
+        cli.main(["scan", str(self.artifact), "--output", str(self.inv), "--workdir", str(self.work)])
+
+    def evidence(self, unpacker_calls):
+        original = unpack.Unpacker.run
+
+        def counting_run(self_, artifact):
+            unpacker_calls.append(artifact)
+            return original(self_, artifact)
+        unpack.Unpacker.run = counting_run
+        self.addCleanup(setattr, unpack.Unpacker, "run", original)
+        out = self.dir / "ev.json"
+        cli.main(["evidence", str(self.artifact), "--inventory", str(self.inv), "--matches", str(self.matches),
+                  "--output", str(out), "--workdir", str(self.work)])
+        return json.loads(out.read_text())["results"][0]
+
+    def test_reuses_matching_workdir(self):
+        self.assertTrue((self.work / "leaves.json").is_file())
+        calls = []
+        self.assertEqual(self.evidence(calls)["present"], ["JndiLookup"])
+        self.assertEqual(calls, [])  # no second unpack
+
+    def test_unpacks_again_for_a_different_artifact(self):
+        self.artifact.write_bytes(fx.tar_bytes({"log4j.jar": fx.zip_bytes({POM_PATH: POM, JNDI + ".class": fx.JAVA_CLASS}),
+                                                "extra.txt": b"changed"}))
+        calls = []
+        self.assertEqual(self.evidence(calls)["present"], ["JndiLookup"])
+        self.assertEqual(len(calls), 1)
+
+    def test_unpacks_again_when_files_are_gone(self):
+        manifest = json.loads((self.work / "leaves.json").read_text())
+        (self.work / manifest["leaves"][0]["real"]).unlink()
+        calls = []
+        self.evidence(calls)
+        self.assertEqual(len(calls), 1)

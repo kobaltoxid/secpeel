@@ -61,6 +61,7 @@ bsca: {
     class: component
   }
   unpack -> identify: files
+  unpack -> evidence: files
 }
 
 secdepth: secdepth {
@@ -69,5 +70,5 @@ secdepth: secdepth {
 
 artifact -> bsca.unpack
 bsca.identify -> secdepth: "inventory +\nledger"
-secdepth -> bsca.evidence: matches
+secdepth -> bsca.evidence: matches.json
 bsca.evidence -> secdepth: "class and symbol\nevidence"

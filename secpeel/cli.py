@@ -9,6 +9,31 @@ import tempfile
 from . import VERSION, evidence, identify, inventory, unpack
 
 
+MANIFEST = "leaves.json"
+
+
+def write_manifest(workdir, sha256, unpacker):
+    """Record the unpacked files so a later step (evidence) can reuse them instead of unpacking again."""
+    leaves = [{"path": l["path"], "real": str(pathlib.Path(l["real"]).resolve().relative_to(workdir.resolve())),
+               "type": l["type"], "size": l["size"]} for l in unpacker.leaves]
+    (workdir / MANIFEST).write_text(json.dumps({"artifact_sha256": sha256, "leaves": leaves}), encoding="utf-8")
+
+
+def load_manifest(workdir, sha256):
+    """Leaves from a kept scan of the same artifact, or (None, reason)."""
+    path = workdir / MANIFEST
+    if not path.is_file():
+        return None, "no %s in %s" % (MANIFEST, workdir)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("artifact_sha256") != sha256:
+        return None, "%s was written for a different artifact" % path
+    leaves = [dict(l, real=workdir / l["real"]) for l in data["leaves"]]
+    missing = [l for l in leaves if not l["real"].exists()]
+    if missing:
+        return None, "%d unpacked files are missing from %s" % (len(missing), workdir)
+    return leaves, None
+
+
 def scan(args):
     artifact = pathlib.Path(args.artifact)
     if not artifact.is_file():
@@ -22,6 +47,8 @@ def scan(args):
         found = identify.identify(unpacker.leaves)
         data = inventory.build(artifact, args.artifact, unpacker, sorted(found.components.values(), key=lambda c: c["id"]),
                                found.identified, found.notes)
+        if args.keep_workdir or args.workdir:
+            write_manifest(workdir, data["target"]["sha256"], unpacker)
     finally:
         if not args.keep_workdir and not args.workdir:
             shutil.rmtree(workdir, ignore_errors=True)
@@ -42,12 +69,20 @@ def evidence_cmd(args):
     artifact = pathlib.Path(args.artifact)
     matches = json.loads(pathlib.Path(args.matches).read_text(encoding="utf-8"))
     data = json.loads(pathlib.Path(args.inventory).read_text(encoding="utf-8"))
-    workdir = pathlib.Path(tempfile.mkdtemp(prefix="secpeel-evidence-"))
-    try:
-        unpacker = unpack.Unpacker(workdir).run(artifact)
-        result = evidence.collect(unpacker.leaves, {c["id"]: c for c in data["components"]}, matches)
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+    components = {c["id"]: c for c in data["components"]}
+    leaves, reason = (None, "no --workdir given")
+    if args.workdir:
+        leaves, reason = load_manifest(pathlib.Path(args.workdir), inventory.sha256(artifact))
+    if leaves is not None:
+        print("reusing unpacked files from %s" % args.workdir)
+        result = evidence.collect(leaves, components, matches)
+    else:
+        print("unpacking %s again (%s)" % (artifact.name, reason))
+        workdir = pathlib.Path(tempfile.mkdtemp(prefix="secpeel-evidence-"))
+        try:
+            result = evidence.collect(unpack.Unpacker(workdir).run(artifact).leaves, components, matches)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
     out = pathlib.Path(args.output) if args.output else pathlib.Path(args.matches).with_name("evidence.json")
     out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     present = sum(1 for r in result["results"] if r["present"])
@@ -73,5 +108,6 @@ def main(argv=None):
     e.add_argument("--inventory", required=True)
     e.add_argument("--matches", required=True)
     e.add_argument("--output", help="evidence path (default: evidence.json next to the matches)")
+    e.add_argument("--workdir", help="reuse the files a scan kept with --workdir (unpacks again if they do not match)")
     args = parser.parse_args(argv)
     return evidence_cmd(args) if args.command == "evidence" else scan(args)
