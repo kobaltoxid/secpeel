@@ -77,15 +77,30 @@ Run the `secpeel evidence` command from this repository. Give it the same `--wor
 
 The command checks whether the classes or functions each advisory names are present in the component and which other code references them. It is optional triage after a version match: the match alone is enough to plan an upgrade, and the evidence helps decide how urgently to mitigate when you cannot patch yet. A hit does not prove the vulnerable code is reachable at runtime, and a miss does not clear the finding. When they are present, the finding becomes `conditional`; otherwise it stays `unknown` for review.
 
-Evidence covers Java classes and native ELF or Mach-O symbols only. Components identified from Python, Go, Rust, .NET or npm metadata get no code-level evidence yet, so their findings stay `unknown`. Set `CFR_JAR` to a CFR decompiler JAR to include decompiled lines from referencing Java classes.
+Evidence covers these ecosystems:
+
+| Ecosystem | What is checked | Strongest result |
+| --- | --- | --- |
+| Java | Named classes in the JAR and the classes that reference them | `conditional` |
+| Go | Vulnerable symbols from OSV, or names in the advisory, in the binary's function table | `not-reachable` when no listed symbol is linked |
+| Rust | Mangled function symbols and the crate's embedded source paths | `conditional` |
+| Python | Named `def` and `class` lines in the package's files, and other files that import it | `conditional` |
+| Native libraries | ELF and Mach-O symbol tables and the binaries that import them | `conditional` |
+
+Go can rule code out because its linker keeps only functions a program can call. Other ecosystems cannot: a missing name may be stripped, inlined or renamed. Components from npm, .NET and other ecosystems get no code-level evidence yet, so their findings stay `unknown`.
 
 The files the two tools exchange are versioned, and each reader checks the version and the fields it relies on. secpeel owns the evidence format ([schemas/evidence-schema.json](schemas/evidence-schema.json)); secdepth's [hand-off formats](https://github.com/kobaltoxid/secdepth/blob/main/docs/handoff-formats.md) page describes all three files and the compatibility rules.
 
 Native components are matched through NVD by CPE. Set `NVD_API_KEY` to raise NVD's rate limit.
 
+## Roadmap
+
+- Evidence checks for JavaScript: find the named functions in bundled `node_modules` sources and the files that require them.
+- Evidence checks for PHP: find the named functions and classes in Composer packages under `vendor/` and the files that use them.
+- RPM database parsing and an optional Syft identifier.
+
 ## Limitations
 
-- RPM databases are not parsed yet, and Syft is not integrated.
 - Native checkers cover the libraries listed above. Stripped static binaries and libraries without checkers stay `unidentified`.
 - Go binaries built before Go 1.18 and Go programs built as `(devel)` lack usable version data; the latter are reported with an unknown version.
 

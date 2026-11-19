@@ -215,3 +215,63 @@ class MatchesContractTests(unittest.TestCase):
         (root / "m.json").write_text(json.dumps(bad))
         self.assertEqual(cli.main(["evidence", str(artifact), "--inventory", str(root / "inv.json"),
                                    "--matches", str(root / "m.json")]), 1)
+
+
+class EcosystemEvidenceTests(unittest.TestCase):
+    def collect(self, members, components, advisories):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        artifact = pathlib.Path(tmp.name) / "app.tar"
+        artifact.write_bytes(fx.tar_bytes(members))
+        leaves = unpack.Unpacker(pathlib.Path(tmp.name) / "w", which=lambda _n: None).run(artifact).leaves
+        rows = evidence.collect(leaves, {c["id"]: c for c in components}, {"advisories": advisories})["results"]
+        return {r["advisory_id"]: r for r in rows}
+
+    @staticmethod
+    def comp(cid, name, version, ecosystem, location):
+        return {"id": cid, "name": name, "version": version, "ecosystem": ecosystem,
+                "evidence": [{"location": location}]}
+
+    def test_go_symbols_linked_or_not(self):
+        binary = fx.ELF + b"\x00golang.org/x/crypto/ssh.NewServerConn\x00golang.org/x/crypto/ssh.(*connection).serverAuthenticate\x00"
+        comp = self.comp("Go:golang.org/x/crypto@0.1.0", "golang.org/x/crypto", "0.1.0", "Go", "app.tar!/bin/svc")
+        rows = self.collect({"bin/svc": binary}, [comp], [
+            {"id": "GO-1", "summary": "", "details": "", "affected": [{"component_id": comp["id"],
+             "symbols": ["golang.org/x/crypto/ssh.NewServerConn", "golang.org/x/crypto/ssh.connection.serverAuthenticate"]}]},
+            {"id": "GO-2", "summary": "", "details": "", "affected": [{"component_id": comp["id"],
+             "symbols": ["golang.org/x/crypto/acme.Client.Register"]}]}])
+        self.assertEqual(rows["GO-1"]["proposed_reachability"], "conditional")
+        self.assertEqual(len(rows["GO-1"]["present"]), 2)
+        self.assertEqual(rows["GO-2"]["proposed_reachability"], "not-reachable")
+        self.assertIn("no call path", " ".join(rows["GO-2"]["facts"]))
+
+    def test_rust_symbol_and_crate_paths(self):
+        binary = fx.ELF + b"\x00_ZN5regex5Regex3new17h0123456789abcdefE\x00/root/.cargo/registry/src/regex-1.5.4/src/re.rs\x00"
+        comp = self.comp("crates.io:regex@1.5.4", "regex", "1.5.4", "crates.io", "app.tar!/bin/tool")
+        rows = self.collect({"bin/tool": binary}, [comp], [
+            {"id": "RUSTSEC-1", "summary": "", "details": "", "affected": [{"component_id": comp["id"], "symbols": ["regex::Regex::new"]}]},
+            {"id": "RUSTSEC-2", "summary": "", "details": "", "affected": [{"component_id": comp["id"], "symbols": ["regex::RegexSet::new"]}]}])
+        self.assertEqual(rows["RUSTSEC-1"]["proposed_reachability"], "conditional")
+        self.assertIn("crate's code is linked", " ".join(rows["RUSTSEC-1"]["facts"]))
+        self.assertEqual(rows["RUSTSEC-2"]["proposed_reachability"], "unknown")
+        self.assertIn("inconclusive", " ".join(rows["RUSTSEC-2"]["facts"]))
+
+    def test_python_definition_and_importers(self):
+        site = "usr/lib/python3/site-packages/"
+        members = {
+            site + "yaml_lib-5.3.dist-info/METADATA": b"Name: yaml-lib\nVersion: 5.3\n",
+            site + "yaml_lib-5.3.dist-info/RECORD": b"yaml_lib/__init__.py,,\nyaml_lib/loader.py,,\nyaml_lib-5.3.dist-info/METADATA,,\n",
+            site + "yaml_lib/__init__.py": b"from .loader import full_load\n",
+            site + "yaml_lib/loader.py": b"import os\n\ndef full_load(stream):\n    return eval(stream)\n",
+            "app/main.py": b"import yaml_lib\nprint(yaml_lib.full_load('1'))\n",
+        }
+        comp = self.comp("PyPI:yaml-lib@5.3", "yaml-lib", "5.3", "PyPI", "app.tar!/" + site + "yaml_lib-5.3.dist-info/METADATA")
+        rows = self.collect(members, [comp], [
+            {"id": "PYSEC-1", "summary": "Unsafe full_load", "details": "Calling full_load on untrusted input runs code.",
+             "affected": [{"component_id": comp["id"]}]},
+            {"id": "PYSEC-2", "summary": "Issue in dump_all", "details": "", "affected": [{"component_id": comp["id"]}]}])
+        self.assertEqual(rows["PYSEC-1"]["proposed_reachability"], "conditional")
+        facts = " ".join(rows["PYSEC-1"]["facts"])
+        self.assertIn("yaml_lib/loader.py:3", facts)
+        self.assertIn("app.tar!/app/main.py", facts)
+        self.assertEqual(rows["PYSEC-2"]["proposed_reachability"], "unknown")

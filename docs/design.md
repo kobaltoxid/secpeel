@@ -94,6 +94,11 @@ secdepth's existing renderer writes the canonical `report.json` and the offline 
 
 Tool details come from a survey of the projects' repositories and documentation on 2026-11-19. API rate limits, OSV batch limits and the licenses of unblob's external extractors still need confirmation.
 
+## Roadmap
+
+- Code evidence for JavaScript and PHP components, following the Python approach: locate the package's files, look for the named definitions, and list the files that use the package.
+- RPM database parsing, and Syft as an optional identifier.
+
 ## Non-goals
 
 - Discovering unknown vulnerabilities by fuzzing, symbolic execution or broad static analysis.
