@@ -44,9 +44,8 @@ The unpacker identifies each file by content, not by extension. It unpacks ZIP-b
 
 Identifiers run on every unpacked file, in order of reliability:
 
-1. Embedded package metadata gives exact names and versions: Maven `pom.properties` and `MANIFEST.MF`, `package.json`, Python `dist-info`, dpkg, apk and rpm databases, Go build information, `cargo-auditable` data, .NET `deps.json` and PE version resources. [Syft](https://github.com/anchore/syft) can supply this layer when installed.
-2. Known file hashes give exact matches for files from known releases.
-3. Version strings and symbols identify native libraries such as OpenSSL, zlib, curl and SQLite. These checkers return a version or a version range with a confidence level.
+1. Embedded package metadata gives exact names and versions: Maven `pom.properties` and `MANIFEST.MF`, `package.json`, Python `dist-info`, dpkg and apk databases, Go build information, `cargo-auditable` data, .NET `deps.json` and PE version resources. RPM databases and [Syft](https://github.com/anchore/syft) integration are not implemented yet.
+2. Version strings identify native libraries such as OpenSSL, zlib, curl and SQLite. These checkers return a version or a version range with a confidence level.
 
 Every record keeps its evidence: the file path inside the artifact, the identifier, the matched value and the confidence. A file no identifier claims is recorded as `unidentified`.
 
@@ -69,7 +68,7 @@ For each match, secdepth collects evidence without a model:
 - Go: [govulncheck](https://go.dev/doc/tutorial/govulncheck) reports whether the vulnerable symbol is reachable from the program's entry points.
 - Fix check: whether resolving the recommended upgrade removes the advisory.
 
-When code-level evidence is needed from a compiled artifact, secpeel can decompile the affected component only: CFR or Vineflower for Java, ilspycmd for .NET, Ghidra in headless mode for native code. A finding without enough evidence stays `conditional` or `undetermined`.
+For a compiled artifact, `secpeel evidence` checks whether the classes or functions an advisory names are present in the affected component, and lists the code that references them. It reads JAR contents and constant pools for Java and symbol tables for native code. CFR can decompile the referencing Java classes when it is installed. A finding without that evidence stays `unknown`.
 
 ### 6. Review with a model
 
@@ -83,12 +82,12 @@ secdepth's existing renderer writes the canonical `report.json` and the offline 
 
 | Area | Decision | Reason |
 | --- | --- | --- |
-| Unpacking | Standard library for common formats; unblob (MIT) when installed | unblob covers firmware and carving, and reports unknown chunks |
-| Metadata identification | Own parsers for common formats; Syft (Apache-2.0) when installed | Syft is mature across ecosystems; own parsers keep the core dependency-free |
+| Unpacking | Standard library for common formats; unblob (MIT) or 7z when installed | unblob covers firmware and carving, and reports unknown chunks |
+| Metadata identification | Own parsers; Syft (Apache-2.0) planned as an optional add-on | Own parsers keep the core dependency-free |
 | Native library checkers | Own pattern files under a permissive license | cve-bin-tool has the best checker set but is GPL-3.0 and last released in 2024 |
 | Advisory data | OSV API and its offline export; NVD CPE as a fallback | OSV covers language ecosystems and distributions, including backports |
 | Prioritization | CISA KEV and EPSS as extra fields | Both are free, keyless feeds |
-| Reachability | govulncheck for Go; own call-site search for other ecosystems | No mature open-source call-graph tool exists for Java, npm, Python or .NET |
+| Reachability | govulncheck for Go; own call-site search for other ecosystems; symbol and class presence for artifacts | No mature open-source call-graph tool exists for Java, npm, Python or .NET |
 | Coverage ledger, evidence records, hand-off format | Build | No surveyed tool provides them |
 
 Tool details come from a survey of the projects' repositories and documentation on 2026-11-19. API rate limits, OSV batch limits and the licenses of unblob's external extractors still need confirmation.

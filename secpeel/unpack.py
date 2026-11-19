@@ -16,6 +16,7 @@ import stat
 import struct
 import subprocess
 import tarfile
+import tempfile
 import zipfile
 
 from . import filetypes
@@ -60,6 +61,9 @@ class Unpacker:
 
     def run(self, artifact):
         artifact = pathlib.Path(artifact)
+        # A fresh folder per run, so a reused scratch directory never mixes or collides with earlier runs.
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        self.workdir = pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=self.workdir))
         queue = collections.deque([(artifact, artifact.name, 0)])
         while queue:
             real, virtual, depth = queue.popleft()

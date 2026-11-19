@@ -23,7 +23,7 @@ def component_id(ecosystem, name, version):
     return "%s:%s@%s" % (ecosystem, name, version if version else "unknown")
 
 
-def build(artifact, display_path, unpacker, components=(), identified_paths=(), which=shutil.which):
+def build(artifact, display_path, unpacker, components=(), identified_paths=(), notes=None, which=shutil.which):
     """Assemble the inventory: the artifact as root, found components, and the full coverage ledger."""
     digest = sha256(artifact)
     root_id = component_id("artifact", artifact.name, None)
@@ -33,12 +33,12 @@ def build(artifact, display_path, unpacker, components=(), identified_paths=(), 
         "evidence": [{"identifier": "artifact", "location": artifact.name, "detail": "sha256:" + digest, "confidence": "exact"}],
     }
     identified = set(identified_paths)
+    notes = notes or {}
     entries = list(unpacker.entries)
     for leaf in unpacker.leaves:
         status = "identified" if leaf["path"] in identified else "unidentified"
-        entries.append({"path": leaf["path"], "status": status,
-                        "reason": None if status == "identified" else "no identifier matched this file",
-                        "type": leaf["type"], "size": leaf["size"]})
+        reason = None if status == "identified" else notes.get(leaf["path"], "no identifier matched this file")
+        entries.append({"path": leaf["path"], "status": status, "reason": reason, "type": leaf["type"], "size": leaf["size"]})
     entries.sort(key=lambda e: e["path"])
     return {
         "schema": SCHEMA,
@@ -54,6 +54,37 @@ def build(artifact, display_path, unpacker, components=(), identified_paths=(), 
             "tools": [{"name": t, "available": which(t) is not None, "used": t in unpacker.tools_used} for t in OPTIONAL_TOOLS],
         },
         "resolution": [],
+    }
+
+
+def to_cyclonedx(data):
+    """A CycloneDX 1.5 SBOM view of the inventory, with where each component was found."""
+    root = data["components"][0]
+    components = []
+    for comp in data["components"][1:]:
+        entry = {"type": "library", "bom-ref": comp["id"], "name": comp["name"]}
+        if comp.get("version"):
+            entry["version"] = comp["version"]
+        if comp.get("purl"):
+            entry["purl"] = comp["purl"]
+        if comp.get("cpe"):
+            entry["cpe"] = comp["cpe"]
+        entry["evidence"] = {"occurrences": [{"location": e["location"]} for e in comp["evidence"]],
+                             "identity": {"field": "purl" if comp.get("purl") else "name",
+                                          "confidence": {"exact": 1.0, "high": 0.8, "medium": 0.5, "low": 0.2}[comp["evidence"][0]["confidence"]],
+                                          "methods": [{"technique": "manifest-analysis", "confidence": 1.0,
+                                                       "value": comp["evidence"][0]["identifier"]}]}}
+        components.append(entry)
+    return {
+        "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
+        "metadata": {
+            "timestamp": data["generated_at"],
+            "tools": {"components": [{"type": "application", "name": data["producer"]["name"], "version": data["producer"]["version"]}]},
+            "component": {"type": "file", "bom-ref": root["id"], "name": root["name"],
+                          "hashes": [{"alg": "SHA-256", "content": data["target"]["sha256"]}]},
+        },
+        "components": components,
+        "dependencies": [{"ref": root["id"], "dependsOn": [c["bom-ref"] for c in components]}],
     }
 
 
