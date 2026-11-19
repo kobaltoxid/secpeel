@@ -4,6 +4,12 @@ secpeel finds the open-source components inside compiled artifacts, such as exec
 
 Detection is deterministic and never runs the artifact. A language model is used only later, in secdepth, to review flagged findings and write advice. The name is a placeholder.
 
+secpeel does two jobs for secdepth: it builds the inventory, and after matching it looks for the vulnerable code itself.
+
+![The artifact goes to the unpacker, which passes files to the identifiers. The identifiers send an inventory and coverage ledger to secdepth. secdepth sends its matches to the evidence collector, which returns class and symbol evidence.](docs/diagrams/scan-flow.svg)
+
+Figure 1. The scan feeds secdepth's matcher, and the evidence step answers its matches. [D2 source](docs/diagrams/scan-flow.d2)
+
 ## Install
 
 secpeel needs Python 3.10 or newer and no packages. Clone it and run it from the repository root:
