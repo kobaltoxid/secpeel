@@ -17,7 +17,7 @@ The pipeline answers two questions: which open-source components and versions an
 
 secpeel produces a component inventory from an artifact. secdepth produces the same inventory from source code, then matches it against advisories, checks exploitability and writes the report.
 
-![An artifact goes to secpeel, which sends an inventory and coverage ledger to secdepth. A source project goes to secdepth's resolver. secdepth matches the inventory against advisory databases, and a model reviews the findings and writes the report.](diagrams/design-context.svg)
+![An artifact goes to secpeel, which sends an inventory and coverage ledger to secdepth. A source project goes to secdepth's resolver. secdepth matches the inventory against the OSV and NVD advisory databases, and a model reviews the findings.](diagrams/design-context.svg)
 
 Figure 1. Both inputs meet at the inventory; only the final review uses a model. [D2 source](diagrams/design-context.d2)
 

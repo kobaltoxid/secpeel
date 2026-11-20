@@ -1,74 +1,176 @@
 direction: right
 
 vars: {
+  # Fills sit at the same lightness and saturation so yellow and green read as one family.
+  # Lines and arrows are mid-tones with at least 3:1 contrast on both the light and dark canvas.
+  colors: {
+    owned-light: "#FAECB6"
+    owned-dark: "#5B4315"
+    store-light: "#C9F4D7"
+    store-dark: "#234932"
+    owned-line: "#AD8522"
+    desired: "#228B22"
+    undesired: "#E24942"
+    neutral: "#868D95"
+  }
   d2-config: {
-    theme-id: 3
+    theme-id: 0
     dark-theme-id: 200
+    # Fills use theme slots so they switch with the viewer's color scheme. Rectangles take
+    # B4 to B6 and cylinders AA4 or AA5 depending on nesting depth; B1 draws unclassed lines.
+    # Shapes nested three or more boundaries deep take the canvas color instead.
     theme-overrides: {
-      B1: "#627985"
-      B3: "#EFF5F7"
-      B4: "#EFF5F7"
-      B5: "#EFF5F7"
-      B6: "#EFF5F7"
-      AA5: "#EFF5F7"
-      N1: "#182A34"
-      N2: "#526570"
+      B1: ${colors.neutral}
+      B2: ${colors.neutral}
+      B3: "#E5E8EB"
+      B4: ${colors.owned-light}
+      B5: ${colors.owned-light}
+      B6: ${colors.owned-light}
+      AA4: ${colors.store-light}
+      AA5: ${colors.store-light}
     }
     dark-theme-overrides: {
-      B1: "#8FA6B0"
-      B3: "#26383F"
-      B4: "#26383F"
-      B5: "#26383F"
-      B6: "#26383F"
-      AA5: "#26383F"
-      N1: "#EDF3F5"
-      N2: "#BAC8CE"
+      B1: ${colors.neutral}
+      B2: ${colors.neutral}
+      B3: "#3A4148"
+      B4: ${colors.owned-dark}
+      B5: ${colors.owned-dark}
+      B6: ${colors.owned-dark}
+      AA4: ${colors.store-dark}
+      AA5: ${colors.store-dark}
     }
   }
 }
 
 classes: {
-  component: {
+  # A component the system owns: the main subject of the diagram. Keep it a rectangle.
+  owned: {
     style: {
-      border-radius: 8
-      stroke-width: 1
+      stroke: ${colors.owned-line}
+      stroke-width: 2
+      border-radius: 6
+      bold: true
     }
   }
+  # Stored data: databases, queues, files, caches.
+  store: {
+    shape: cylinder
+    style: {
+      stroke: ${colors.desired}
+      stroke-width: 2
+      bold: true
+    }
+  }
+  # Something outside the system: a client, service, or third party.
+  external: {
+    style: {
+      fill: transparent
+      stroke: ${colors.neutral}
+      stroke-width: 2
+      stroke-dash: 4
+      border-radius: 6
+      bold: false
+    }
+  }
+  # A person outside the system. A dashed outline makes the icon look broken, so keep it solid.
+  person: {
+    shape: person
+    style: {
+      fill: transparent
+      stroke: ${colors.neutral}
+      stroke-width: 2
+    }
+  }
+  # An ownership or deployment boundary.
   boundary: {
     style: {
       fill: transparent
-      stroke: "#CBD8DF"
+      stroke: ${colors.neutral}
       stroke-width: 1
+      font-size: 16
+      border-radius: 4
+    }
+  }
+  # The desired path: what should happen.
+  flow: {
+    style: {
+      stroke: ${colors.desired}
+      stroke-width: 2
+    }
+  }
+  # A reply, read-back, recovery, or optional side effect.
+  reply: {
+    style: {
+      stroke: ${colors.neutral}
+      stroke-width: 2
+      stroke-dash: 4
+    }
+  }
+  # A structural relationship with no direction, drawn with --.
+  link: {
+    style: {
+      stroke: ${colors.neutral}
+      stroke-width: 1
+    }
+  }
+  # An undesired path: failure, rejection, or error.
+  fail: {
+    style: {
+      stroke: ${colors.undesired}
+      font-color: ${colors.undesired}
+      stroke-width: 2
+      stroke-dash: 4
+      bold: true
+    }
+  }
+  # A state or outcome nobody wants: failure, rejection, dead letter.
+  failed: {
+    style: {
+      fill: transparent
+      stroke: ${colors.undesired}
+      font-color: ${colors.undesired}
+      stroke-width: 2
+      border-radius: 6
+      bold: true
+    }
+  }
+  # Start and end markers for state machines.
+  start: {
+    shape: circle
+    label: ""
+    width: 20
+    style: {
+      fill: ${colors.desired}
+      stroke: ${colors.desired}
+    }
+  }
+  end: {
+    shape: circle
+    label: ""
+    width: 24
+    style: {
+      fill: transparent
+      stroke: ${colors.desired}
+      stroke-width: 6
     }
   }
 }
 
-artifact: Artifact {
-  shape: document
-  class: component
-}
+artifact: Artifact {class: external}
 
-bsca: {
-  label: secpeel
+scan: secpeel scan {
   class: boundary
-  unpack: Unpacker {
-    class: component
-  }
-  identify: Identifiers {
-    class: component
-  }
-  evidence: Evidence collector {
-    class: component
-  }
-  unpack -> identify: files
-  unpack -> evidence: files
+  unpack: Unpacker {class: owned}
+  identify: Identifiers {class: owned}
+  unpack -> identify {class: flow}
 }
 
-secdepth: secdepth {
-  class: component
-}
+match: secdepth match {class: external}
+evidence: secpeel evidence {class: owned}
+check: secdepth check {class: external}
 
-artifact -> bsca.unpack
-bsca.identify -> secdepth: "inventory +\nledger"
-secdepth -> bsca.evidence: matches.json
-bsca.evidence -> secdepth: "class and symbol\nevidence"
+artifact -> scan.unpack {class: flow}
+scan.identify -> match: inventory {class: flow}
+match -> evidence: matches.json {class: reply}
+scan.unpack -> evidence: files {class: reply}
+evidence -> check: evidence {class: reply}
