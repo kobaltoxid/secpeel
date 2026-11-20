@@ -16,7 +16,7 @@ Three questions split the work between the two tools:
 
 A standalone `secpeel scan` produces no vulnerability findings; matching happens in secdepth.
 
-![secpeel scan unpacks the artifact and identifies its components, then sends the inventory and coverage ledger to secdepth's match step. The optional secpeel evidence step reads secdepth's matches.json and the unpacked files, and sends class and symbol evidence to secdepth's check step.](docs/diagrams/scan-flow.svg)
+![secpeel scan sends its component inventory and coverage ledger to secdepth's match step. The optional secpeel evidence step reads secdepth's matches.json and the scan's unpacked files, and sends class and symbol evidence to secdepth's check step.](docs/diagrams/scan-flow.svg)
 
 Figure 1. The scan stands alone. The optional evidence step reads secdepth's matches file and reuses the unpacked files. Key: green, the scan; dashed grey, the optional evidence step; dashed boxes, secdepth. [D2 source](docs/diagrams/scan-flow.d2)
 

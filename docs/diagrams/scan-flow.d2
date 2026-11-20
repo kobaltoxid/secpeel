@@ -1,4 +1,4 @@
-direction: down
+direction: right
 
 vars: {
   # Fills sit at the same lightness and saturation so yellow and green read as one family.
@@ -163,14 +163,12 @@ classes: {
   }
 }
 
-artifact: Artifact {class: external}
-scan: "secpeel scan\nunpack · identify" {class: owned}
-match: secdepth match {class: external}
-evidence: secpeel evidence {class: owned}
-check: secdepth check {class: external}
+scan: "secpeel\nscan" {class: owned}
+match: "secdepth\nmatch" {class: external}
+evidence: "secpeel\nevidence" {class: owned}
+check: "secdepth\ncheck" {class: external}
 
-artifact -> scan {class: flow}
-scan -> match: inventory + ledger {class: flow}
-match -> evidence: matches.json {class: reply}
-scan -> evidence: unpacked files {class: reply}
-evidence -> check: symbol evidence {class: reply}
+scan -> match: inventory {class: flow}
+match -> evidence: matches {class: reply}
+scan -> evidence: files {class: reply}
+evidence -> check: symbols {class: reply}
