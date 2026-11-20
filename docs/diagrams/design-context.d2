@@ -1,4 +1,4 @@
-direction: right
+direction: down
 
 vars: {
   # Fills sit at the same lightness and saturation so yellow and green read as one family.
@@ -22,6 +22,7 @@ vars: {
     theme-overrides: {
       B1: ${colors.neutral}
       B2: ${colors.neutral}
+      N2: "#4B5563"
       B3: "#E5E8EB"
       B4: ${colors.owned-light}
       B5: ${colors.owned-light}
@@ -32,6 +33,7 @@ vars: {
     dark-theme-overrides: {
       B1: ${colors.neutral}
       B2: ${colors.neutral}
+      N2: "#C9D1D9"
       B3: "#3A4148"
       B4: ${colors.owned-dark}
       B5: ${colors.owned-dark}
@@ -46,6 +48,7 @@ classes: {
   # A component the system owns: the main subject of the diagram. Keep it a rectangle.
   owned: {
     style: {
+      font-size: 18
       stroke: ${colors.owned-line}
       stroke-width: 2
       border-radius: 6
@@ -56,6 +59,7 @@ classes: {
   store: {
     shape: cylinder
     style: {
+      font-size: 18
       stroke: ${colors.desired}
       stroke-width: 2
       bold: true
@@ -64,6 +68,7 @@ classes: {
   # Something outside the system: a client, service, or third party.
   external: {
     style: {
+      font-size: 18
       fill: transparent
       stroke: ${colors.neutral}
       stroke-width: 2
@@ -76,13 +81,15 @@ classes: {
   person: {
     shape: person
     style: {
+      font-size: 18
       fill: transparent
       stroke: ${colors.neutral}
       stroke-width: 2
     }
   }
-  # An ownership or deployment boundary.
+  # An ownership or deployment boundary. Its title sits top left so incoming arrows do not cross it.
   boundary: {
+    label.near: top-left
     style: {
       fill: transparent
       stroke: ${colors.neutral}
@@ -159,19 +166,12 @@ classes: {
 artifact: Compiled artifact {class: external}
 source: Source project {class: external}
 secpeel: secpeel {class: owned}
-
-secdepth: secdepth {
-  class: boundary
-  resolver: Resolver {class: owned}
-  match: Match and check {class: owned}
-  resolver -> match: inventory {class: flow}
-}
-
+secdepth: "secdepth\nresolve · match · check" {class: owned}
 advisories: OSV + NVD {class: store}
 review: Model review {class: external}
 
 artifact -> secpeel: files {class: flow}
-source -> secdepth.resolver: lockfiles {class: flow}
-secpeel -> secdepth.match: inventory + ledger {class: flow}
-secdepth.match -> advisories: lookups {class: reply}
-secdepth.match -> review: findings {class: flow}
+secpeel -> secdepth: inventory + ledger {class: flow}
+source -> secdepth: lockfiles {class: flow}
+secdepth -> advisories: lookups {class: reply}
+secdepth -> review: findings {class: flow}
