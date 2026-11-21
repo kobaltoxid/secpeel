@@ -5,11 +5,30 @@ import pathlib
 import shutil
 import sys
 import tempfile
+from contextlib import contextmanager
 
 from . import VERSION, evidence, identify, inventory, unpack
 
 
 MANIFEST = "leaves.json"
+
+
+@contextmanager
+def unpacked(artifact, workdir=None, limits=None, *, retain=False, prefix="secpeel-"):
+    """Yield ``(workdir, unpacker)`` and clean up owned scratch space on every exit.
+
+    A caller-provided directory is intentionally never removed: it is the durable
+    hand-off between ``scan`` and ``evidence``.  Temporary directories are removed
+    unless the caller explicitly asks to retain them.
+    """
+    owned = workdir is None
+    root = pathlib.Path(workdir) if workdir is not None else pathlib.Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        yield root, unpack.Unpacker(root, limits).run(artifact)
+    finally:
+        if owned and not retain:
+            shutil.rmtree(root, ignore_errors=True)
 
 
 def write_manifest(workdir, sha256, unpacker):
@@ -40,18 +59,14 @@ def scan(args):
         print("not a file: %s" % artifact, file=sys.stderr)
         return 2
     limits = unpack.Limits(max_depth=args.max_depth, max_total_bytes=args.max_bytes, max_files=args.max_files)
-    workdir = pathlib.Path(args.workdir) if args.workdir else pathlib.Path(tempfile.mkdtemp(prefix="secpeel-"))
-    workdir.mkdir(parents=True, exist_ok=True)
-    try:
-        unpacker = unpack.Unpacker(workdir, limits).run(artifact)
+    workdir = pathlib.Path(args.workdir) if args.workdir else None
+    retain_workdir = args.keep_workdir or workdir is not None
+    with unpacked(artifact, workdir, limits, retain=args.keep_workdir) as (workdir, unpacker):
         found = identify.identify(unpacker.leaves)
         data = inventory.build(artifact, args.artifact, unpacker, sorted(found.components.values(), key=lambda c: c["id"]),
                                found.identified, found.notes)
-        if args.keep_workdir or args.workdir:
+        if retain_workdir:
             write_manifest(workdir, data["target"]["sha256"], unpacker)
-    finally:
-        if not args.keep_workdir and not args.workdir:
-            shutil.rmtree(workdir, ignore_errors=True)
     out = pathlib.Path(args.output) if args.output else pathlib.Path("secpeel-output") / (artifact.name + ".inventory.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -60,7 +75,7 @@ def scan(args):
     counts = inventory.summary(data)
     print("%s: %d components; %d files examined; %s; complete=%s" % (
         out, len(data["components"]) - 1, sum(counts.values()), counts, data["coverage"]["complete"]))
-    if args.keep_workdir or args.workdir:
+    if retain_workdir:
         print("unpacked files kept in %s" % workdir)
     return 0
 
@@ -102,6 +117,20 @@ def validate_inputs(matches, data, matches_path, inventory_path):
     return errors
 
 
+def collect_evidence(artifact, components, matches, workdir=None):
+    """Collect evidence, reusing a matching scan workdir when available."""
+    leaves, reason = (None, "no --workdir given")
+    if workdir is not None:
+        leaves, reason = load_manifest(workdir, inventory.sha256(artifact))
+    if leaves is not None:
+        print("reusing unpacked files from %s" % workdir)
+        return evidence.collect(leaves, components, matches)
+
+    print("unpacking %s again (%s)" % (artifact.name, reason))
+    with unpacked(artifact, prefix="secpeel-evidence-") as (_, unpacker):
+        return evidence.collect(unpacker.leaves, components, matches)
+
+
 def evidence_cmd(args):
     artifact = pathlib.Path(args.artifact)
     try:
@@ -115,19 +144,8 @@ def evidence_cmd(args):
         print("\n".join(problems), file=sys.stderr)
         return 1
     components = {c["id"]: c for c in data["components"]}
-    leaves, reason = (None, "no --workdir given")
-    if args.workdir:
-        leaves, reason = load_manifest(pathlib.Path(args.workdir), inventory.sha256(artifact))
-    if leaves is not None:
-        print("reusing unpacked files from %s" % args.workdir)
-        result = evidence.collect(leaves, components, matches)
-    else:
-        print("unpacking %s again (%s)" % (artifact.name, reason))
-        workdir = pathlib.Path(tempfile.mkdtemp(prefix="secpeel-evidence-"))
-        try:
-            result = evidence.collect(unpack.Unpacker(workdir).run(artifact).leaves, components, matches)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+    result = collect_evidence(artifact, components, matches,
+                              pathlib.Path(args.workdir) if args.workdir else None)
     out = pathlib.Path(args.output) if args.output else pathlib.Path(args.matches).with_name("evidence.json")
     out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     present = sum(1 for r in result["results"] if r["present"])

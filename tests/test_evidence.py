@@ -1,9 +1,11 @@
 import json
 import pathlib
+import shutil
 import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -161,6 +163,19 @@ class WorkdirReuseTests(unittest.TestCase):
         self.evidence(calls)
         self.assertEqual(len(calls), 1)
 
+
+class WorkdirLifecycleTests(unittest.TestCase):
+    def test_temporary_workdir_is_removed_when_unpacking_fails(self):
+        root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        scratch = root / "scratch"
+        artifact = root / "artifact.bin"
+        artifact.write_bytes(b"artifact")
+        with mock.patch.object(cli.tempfile, "mkdtemp", return_value=str(scratch)):
+            with mock.patch.object(unpack.Unpacker, "run", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RuntimeError):
+                    cli.main(["scan", str(artifact), "--output", str(root / "inventory.json")])
+        self.assertFalse(scratch.exists())
 
 class MatchesContractTests(unittest.TestCase):
     """secdepth writes matches.json; secpeel must accept what it writes today and reject what it cannot read."""
