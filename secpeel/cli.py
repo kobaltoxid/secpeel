@@ -31,10 +31,19 @@ def unpacked(artifact, workdir=None, limits=None, *, retain=False, prefix="secpe
             shutil.rmtree(root, ignore_errors=True)
 
 
+def manifest_path(real, workdir):
+    """A leaf's path relative to the workdir, or its absolute path when it was never unpacked (the artifact itself)."""
+    real = pathlib.Path(real).resolve()
+    try:
+        return str(real.relative_to(workdir.resolve()))
+    except ValueError:
+        return str(real)
+
+
 def write_manifest(workdir, sha256, unpacker):
     """Record the unpacked files so a later step (evidence) can reuse them instead of unpacking again."""
-    leaves = [{"path": l["path"], "real": str(pathlib.Path(l["real"]).resolve().relative_to(workdir.resolve())),
-               "type": l["type"], "size": l["size"]} for l in unpacker.leaves]
+    leaves = [{"path": l["path"], "real": manifest_path(l["real"], workdir), "type": l["type"], "size": l["size"]}
+              for l in unpacker.leaves]
     (workdir / MANIFEST).write_text(json.dumps({"artifact_sha256": sha256, "leaves": leaves}), encoding="utf-8")
 
 

@@ -164,6 +164,17 @@ class WorkdirReuseTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+    def test_records_an_artifact_that_is_not_a_container(self):
+        binary = self.dir / "app"
+        binary.write_bytes(b"\x7fELF plain executable bytes")
+        work = self.dir / "binary-work"
+        self.assertEqual(cli.main(["scan", str(binary), "--output", str(self.dir / "bin.json"), "--workdir", str(work)]), 0)
+        sha256 = json.loads((self.dir / "bin.json").read_text())["target"]["sha256"]
+        leaves, reason = cli.load_manifest(work, sha256)
+        self.assertIsNone(reason)
+        self.assertEqual([l["real"] for l in leaves], [binary.resolve()])
+
+
 class WorkdirLifecycleTests(unittest.TestCase):
     def test_temporary_workdir_is_removed_when_unpacking_fails(self):
         root = pathlib.Path(tempfile.mkdtemp())
